@@ -7,8 +7,10 @@ import copy
 class DiffOptimizer():
 
     def __init__(self)->None:
-        self.params_tape:List[List[Tensor]] = None
-        self.states_tape:List[List[Dict[str,Tensor]]] = None
+        self.params_tape:List[List[List[Tensor]]] = None
+        self.states_tape:List[List[List[Dict[str,Tensor]]]] = None
+        self.cur_idx:int = 0
+        self.dLdw_groups:List[Tensor] = None
 
     @staticmethod
     def read_optimizer(opt:Optimizer)->Tuple[dict, List[dict], dict]:
@@ -27,15 +29,12 @@ class DiffOptimizer():
         return init_args, added_groups, state_dict
     
     @staticmethod
-    def flatten(tsr_lst:List[Tensor], detached:bool=False):
+    def flatten(tsr_lst:List[Tensor]):
         """
-        flattens (and detach if detached) a list of tensors
+        flattens a list of tensors
         """
-        if not detached:
-            flat = torch.cat([tsr.flatten() for tsr in tsr_lst], dim=0)
-        else:
-            flat = torch.cat([tsr.flatten().detach() for tsr in tsr_lst], dim=0)
-        return flat
+        return torch.cat([tsr.flatten() for tsr in tsr_lst], dim=0)
+        
     
     @staticmethod
     def read_state(opt:Optimizer, copy_state:bool=True)->List[List[Dict[str, Tensor]]]:
@@ -74,8 +73,102 @@ class DiffOptimizer():
                 pas_lst.append(savepa)
             grouped_params_lst.append(pas_lst)
         return grouped_params_lst
-                
+    
+    @staticmethod
+    def replace_params(opt:Optimizer, param_groups:List[List[Tensor]]):
+        """
+        in-place replacing of params in opt.param_groups by param_groups
+        """
+        pa_groups = opt.param_groups
+        with torch.no_grad():
+            for pag_idx, pa_group in enumerate(pa_groups):
+                pas:List[Tensor] = pa_group['params']
+                for pa_idx, pa in enumerate(pas):
+                    source = param_groups[pag_idx][pa_idx]
+                    pa[:] = source[:]
+        return None
+
+    def backward_step(self, 
+                      meta_params:List[Tensor], 
+                      accum_grad:bool=True, 
+                      roll_back:bool=True):
+        """
+        Take one step backward and compute the meta gradients for meta_params.\\
+        If accum_grad, the meta gradients will be added to meta_params[:].grad;
+        if not accum_grad, the meta gradients will replace meta_params[:].grad.\\
+        If roll_back, the optimizer will roll the backbone model back to its state
+        at the previous forward step before computing meta gradients.\\
+        The backbone model must have is tracked gradients ready before calling 
+        backward_step.
+        """
+        if roll_back:
+            self.roll_back()
+        meta_grads = self._backward_meta_grads(meta_params, roll_back)
+        if accum_grad:
+            for idx, mepa in enumerate(meta_params):
+                if mepa.grad is None:
+                    mepa.grad = meta_grads[idx]
+                else:
+                    mepa.grad.add_(meta_grads[idx])
+        else:
+            for idx, mepa in enumerate(meta_params):
+                mepa.grad = meta_grads[idx]
+        return meta_grads
+    
+    def roll_back(self):
+        """
+        Roll the backbone model back to its state at the previous forward step.
+        """
+        self.cur_idx -= 1
+        param_groups = self.params_tape[self.cur_idx]
+        self.replace_params(self, param_groups)
         
+        return None
+    
+    def post_step(self, taped:bool=True):
+        """
+        All subclasses must call this function in its step() after calling step() of its Optimzer
+        father class.\\
+        tape determines whether to append current state and params.
+        """
+        if taped:
+            self.states_tape.append(self.read_state(self, True))
+            self.params_tape.append(self.read_params(self, True))
+        else:
+            self.states_tape.append(None)
+            self.params_tape.append(None)
+        self.cur_idx += 1
+        return None
+    
+    def read_meta_grads(self):
+        """
+        Reads the meta_grads from backbone after backwarding from meta loss
+        at the end of forward process.
+        """
+        opt:Optimizer = self
+        param_groups = opt.param_groups
+        with torch.no_grad():
+            if self.dLdw_groups is None:
+                self.dLdw_groups = []
+                for param_group in param_groups:
+                    dLdw = torch.cat([ele.grad.flatten() for ele in param_group], dim=0)
+                    self.dLdw_groups.append(dLdw)
+            else:
+                for idx, param_group in enumerate(param_groups):
+                    dLdw = torch.cat([ele.grad.flatten() for ele in param_group], dim=0)
+                    self.dLdw_groups[idx].add_(dLdw)
+        return None
+
+
+
+    def _backward_meta_grads(meta_params:List[Tensor], roll_back:bool=True)->List[Tensor]:
+        """
+        This is the optimizer-specific function for computing the meta gradient.\\
+        If roll_back, the computations on dLdw and other backward states will be in-place,
+        otherwise the computations are performed on copies.
+        """
+        raise NotImplementedError
+
                 
 
 
