@@ -53,8 +53,8 @@ class DiffAdam(DiffOptimizer, Adam):
                 dLdm = self.dLdm_groups[idx]
                 dLdv = self.dLdv_groups[idx]
                 state = states[idx]
-                m = self.flatten([dct['exp_avg'] for dct in state])
-                v = self.flatten([dct['exp_avg_sq'] for dct in state])
+                m = torch.cat([dct['exp_avg'].flatten() for dct in state])
+                v = torch.cat([dct['exp_avg_sq'].flatten() for dct in state])
                 t = self.state[0]['step'].item()
                 omb1 = 1.-beta1
                 omb1t = 1.- np.power(beta1, t)
