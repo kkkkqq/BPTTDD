@@ -22,10 +22,7 @@ class DiffOptimizer():
         param groups and state dict).
         """
         params_0 = opt.param_groups[0]
-        if len(opt.param_groups)>1:
-            groups = opt.param_groups[1:]
-        else:
-            groups = []
+        groups = opt.param_groups[1:]
         state_dict = opt.state_dict()
         init_args = {params_0}
         added_groups = groups
