@@ -12,6 +12,7 @@ class DiffOptimizer():
         self.cur_idx:int = 0
         self.dLdw_groups:List[Tensor] = None
         self.dLdgrad_groups:List[Tensor] = None
+        self.tape_state:bool = None
         # self.add_dLdw_groups:List[Tensor] = None
 
     @staticmethod
@@ -138,7 +139,10 @@ class DiffOptimizer():
         taped determines whether to append current state and params.
         """
         if taped:
-            self.states_tape.append(self.read_state(self, True))
+            if self.tape_state:
+                self.states_tape.append(self.read_state(self, True))
+            else:
+                self.states_tape.append(None)
             self.params_tape.append(self.read_params(self, True))
         else:
             self.states_tape.append(None)
@@ -209,6 +213,19 @@ class DiffOptimizer():
         
         return meta_grads
     
+    def backward(self, loss:Tensor, retain_graph:bool=False, create_graph:bool=False):
+        opt:Optimizer = self
+        params = []
+        for group in opt.param_groups:
+            pas = group['params']
+            params.extend(pas)
+        grads = torch.autograd.grad(outputs=loss,
+                                    inputs=params,
+                                    retain_graph=retain_graph,
+                                    create_graph=create_graph)
+        for idx, pa in enumerate(params):
+            pa.grad = grads[idx]
+        return None
 
 
 
