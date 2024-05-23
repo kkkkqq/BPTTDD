@@ -57,7 +57,7 @@ class DiffAdam(DiffOptimizer, Adam):
                 v = self.flatten([dct['exp_avg_sq'] for dct in state])
                 t = self.state[0]['step'].item()
                 omb1 = 1.-beta1
-                omb1t = 1.-np.power(beta1, t)
+                omb1t = 1.- np.power(beta1, t)
                 omb2 = 1.-beta2
                 omb2t = 1. - np.power(beta2, t)
                 if maximize:
@@ -65,16 +65,14 @@ class DiffAdam(DiffOptimizer, Adam):
                 if weight_decay!=0:
                     w = self.flatten([ele.detach() for ele in group['params']])
                     gt.add_(w.mul(weight_decay))
-                    del w
-                sqrt_vdivomb2t = v
-                sqrt_vdivomb2t.div_(omb2t).pow_(0.5)#v no longer used therefore in-place
+                sqrt_vdivomb2t = v.div_(omb2t).pow_(0.5)#v no longer used therefore in-place
                 dLdm.mul_(beta1).sub_(dLdw.mul(lr/omb1t).div(sqrt_vdivomb2t.add(eps)))
                 dLdv.mul_(beta2).add_(dLdw.mul(lr/omb1t/omb2t/2.0).mul(m).div(sqrt_vdivomb2t).div(sqrt_vdivomb2t.add(eps).pow(2)))
                 gt.mul_(2.*omb2).mul_(dLdv).add_(dLdm.mul(omb1))
                 if weight_decay!=0:
                     dLdw.add_(gt.mul(weight_decay))
                 if maximize:
-                    gt.mul_(-1)
+                    gt.mul_(-1.)
                 self.dLdgrad_groups.append(gt)
         return None
             
