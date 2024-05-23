@@ -42,7 +42,7 @@ class DiffAdam(DiffOptimizer, Adam):
         states = self.states_tape[self.cur_idx]
         with torch.no_grad():
             for idx, group in enumerate(self.param_groups):
-                gt = self.flatten([ele.grad.detach() for ele in group['params']]).detach().clone()
+                gt = self.flatten([ele.grad.detach() for ele in group['params']]).detach()
                 lr = group['lr']
                 beta1 = group['betas'][0]
                 beta2 = group['betas'][1]
