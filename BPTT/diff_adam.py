@@ -76,7 +76,6 @@ class DiffAdam(DiffOptimizer, Adam):
                 if maximize:
                     gt.mul_(-1)
                 self.dLdgrad_groups.append(gt)
-                del m,v
         return None
             
 
