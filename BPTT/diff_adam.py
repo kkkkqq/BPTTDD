@@ -42,7 +42,7 @@ class DiffAdam(DiffOptimizer, Adam):
         states = self.states_tape[self.cur_idx]
         with torch.no_grad():
             for idx, group in enumerate(self.param_groups):
-                gt = self.flatten([ele.grad.detach() for ele in group['params']]).clone()
+                gt = self.flatten([ele.grad.detach() for ele in group['params']]).detach().clone()
                 lr = group['lr']
                 beta1 = group['betas'][0]
                 beta2 = group['betas'][1]
@@ -63,11 +63,11 @@ class DiffAdam(DiffOptimizer, Adam):
                 if maximize:
                     gt.mul_(-1.)
                 if weight_decay!=0:
-                    w = self.flatten([ele.detach() for ele in group['params']])
+                    w = torch.cat([ele.detach().flatten() for ele in group['params']])
                     gt.add_(w.mul(weight_decay))
                 sqrt_vdivomb2t = v.div_(omb2t).pow_(0.5)#v no longer used therefore in-place
                 dLdm.mul_(beta1).sub_(dLdw.mul(lr/omb1t).div(sqrt_vdivomb2t.add(eps)))
-                dLdv.mul_(beta2).add_(dLdw.mul(lr/omb1t/omb2t/2.0).mul(m).div(sqrt_vdivomb2t).div(sqrt_vdivomb2t.add(eps).pow(2)))
+                dLdv.mul_(beta2).add_(dLdw.mul(m.mul_(lr/omb1t/omb2t/2.0)).div_(sqrt_vdivomb2t).div_(sqrt_vdivomb2t.add(eps).pow(2)))#m no longer used, can in-place
                 gt.mul_(2.*omb2).mul_(dLdv).add_(dLdm.mul(omb1))
                 if weight_decay!=0:
                     dLdw.add_(gt.mul(weight_decay))
