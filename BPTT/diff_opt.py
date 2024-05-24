@@ -91,18 +91,14 @@ class DiffOptimizer():
     def backprop_step(self, 
                       meta_params:List[Tensor], 
                       accum_grad:bool=True, 
-                      roll_back:bool=True,
                       update_bp_states:bool=True):
         """
         Take one step backward and compute the meta gradients for meta_params.\\
         If accum_grad, the meta gradients will be added to meta_params[:].grad;
         if not accum_grad, the meta gradients will replace meta_params[:].grad.\\
-        If roll_back, the optimizer will roll the backbone model back to its state
-        at the previous forward step before computing meta gradients.\\
-        The backbone model must have its param.grad ready before calling backprop_step.
+        The backbone model must have been roll_backed and forwarded and backwarded
+        with its param.grad ready before calling backprop_step.
         """
-        if roll_back:
-            self.roll_back()
         if update_bp_states:
             self.update_backprop_state()
             meta_grads = self.backprop_meta_params(meta_params, True)
@@ -129,6 +125,19 @@ class DiffOptimizer():
         
         return None
     
+    def pre_step(self, taped:bool=True):
+        """
+        All subclasses must call this function in its step() before calling step() of its Optimzer
+        father class.\\
+        taped determines whether to append current state and params.
+        """
+        if taped:
+            self.params_tape.append(self.read_params(self, True))
+        else:
+            self.params_tape.append(None)
+        return None
+
+    
     def post_step(self, taped:bool=True):
         """
         All subclasses must call this function in its step() after calling step() of its Optimzer
@@ -140,17 +149,17 @@ class DiffOptimizer():
                 self.states_tape.append(self.read_state(self, True))
             else:
                 self.states_tape.append(None)
-            self.params_tape.append(self.read_params(self, True))
         else:
             self.states_tape.append(None)
-            self.params_tape.append(None)
         self.cur_idx += 1
         return None
     
-    def post_meta_loss_backprop(self):
+    def post_meta_loss_backprop(self, weight:float=1.0):
         """
-        call after self.backward(meta_loss)
-        Reads the grads on backbone from meta_loss and set backprop states.
+        Call after self.backward(meta_loss).\\
+        Reads the grads on backbone from meta_loss and set backprop states.\\
+        `weight`: if meta loss is computed multiple times, the resulting meta
+        gradient is a weighted sum of the meta gradients from each step.
         """
         opt:Optimizer = self
         param_groups = opt.param_groups
@@ -158,11 +167,13 @@ class DiffOptimizer():
             if self.dLdw_groups is None:
                 self.dLdw_groups = []
                 for param_group in param_groups:
-                    dLdw = torch.cat([ele.grad.flatten() for ele in param_group['params']], dim=0)
+                    dLdw = torch.cat([ele.grad.detach().flatten() for ele in param_group['params']], dim=0)
+                    dLdw.mul_(weight)
                     self.dLdw_groups.append(dLdw)
             else:
                 for idx, param_group in enumerate(param_groups):
-                    dLdw = torch.cat([ele.grad.flatten() for ele in param_group['params']], dim=0)
+                    dLdw = torch.cat([ele.grad.detach().flatten() for ele in param_group['params']], dim=0)
+                    dLdw.mul_(weight)
                     self.dLdw_groups[idx].add_(dLdw)
         return None
 
@@ -210,7 +221,7 @@ class DiffOptimizer():
         
         return meta_grads
     
-    def backward(self, loss:Tensor, retain_graph:bool=False, create_graph:bool=False):
+    def backward(self, loss:Tensor, retain_graph:bool=False, create_graph:bool=False, accum_grad:bool=True):
         opt:Optimizer = self
         params = []
         for group in opt.param_groups:
@@ -220,8 +231,12 @@ class DiffOptimizer():
                                     inputs=params,
                                     retain_graph=retain_graph,
                                     create_graph=create_graph)
-        for idx, pa in enumerate(params):
-            pa.grad = grads[idx]
+        with torch.no_grad():
+            for idx, pa in enumerate(params):
+                if pa.grad is None or not accum_grad:
+                    pa.grad = grads[idx]
+                else:
+                    pa.grad.add_(grads[idx])
         return None
 
 

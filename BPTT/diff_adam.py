@@ -25,8 +25,9 @@ class DiffAdam(DiffOptimizer, Adam):
         """
         step function for DiffAdam.
         """
+        self.pre_step(taped=taped)
         super(Adam, self).step()
-        self.post_step(self, taped=taped)
+        self.post_step(taped=taped)
         return None
 
     def update_backprop_state(self):

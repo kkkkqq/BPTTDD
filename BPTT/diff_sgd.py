@@ -5,7 +5,7 @@ from BPTT.diff_opt import DiffOptimizer
 from torch import Tensor
 from typing import List, Dict, Union, Tuple
 
-class DiffAdam(DiffOptimizer, SGD):
+class DiffSGD(DiffOptimizer, SGD):
 
     def __init__(self, opt:SGD):
         super(DiffOptimizer, self).__init__()
@@ -22,8 +22,9 @@ class DiffAdam(DiffOptimizer, SGD):
         """
         step function for DiffAdam.
         """
+        self.pre_step(taped=taped)
         super(SGD, self).step()
-        self.post_step(self, taped=taped)
+        self.post_step(taped=taped)
         return None
     
     def update_backprop_state(self):
