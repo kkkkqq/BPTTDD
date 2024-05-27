@@ -118,7 +118,7 @@ class MEBPTT():
 
     def _check_model_opt(self):
         if self.backbone is None or self.diff_optimizer is None:
-            raise ValueError("haven't registered backbone and optimizer!")
+            raise AssertionError("haven't registered backbone and optimizer!")
         return None
     
     def forward(self, num_steps:int, *args, **kwargs):
@@ -141,7 +141,7 @@ class MEBPTT():
     def meta_loss(self, *args, weight=1, **kwargs):
         """
         Compute meta loss, args and kwargs are passed into meta_loss_handle apart from backbone.\\
-        This may be called multiple times and the meta_loss will be accumulated.
+        This may be called multiple times and the weighted meta_loss will be accumulated.
         """
         self._check_model_opt()
         self.diff_optimizer.zero_grad()
