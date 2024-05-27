@@ -58,12 +58,12 @@ class BaseSynSet():
         for trainable in self.trainables:
             if isinstance(trainable, Tensor):
                 trainable.requires_grad_(False)
-            elif isinstance(trainable, list):
+            elif isinstance(trainable, list) or isinstance(trainable, tuple):
                 for itm in trainable:
                     itm.requires_grad_(False)
             elif isinstance(trainable, dict):
-                for key in trainable.keys():
-                    key.requires_grad_(False)
+                for val in trainable.values():
+                    val.requires_grad_(False)
         return None
     
     def train(self):
@@ -74,8 +74,8 @@ class BaseSynSet():
                 for itm in trainable:
                     itm.requires_grad_(True)
             elif isinstance(trainable, dict):
-                for key in trainable.keys():
-                    key.requires_grad_(True)
+                for val in trainable.values():
+                    val.requires_grad_(True)
         return None
     
 class BaseImageSynSet(BaseSynSet):

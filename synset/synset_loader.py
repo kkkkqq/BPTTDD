@@ -23,6 +23,7 @@ class SynSetLoader():
                 num_left = self.max_items-(num_items-btch)
                 out = (ele[:num_left] for ele in out)
                 unfinished = False
+                self.synset.shuffle()
             yield out
 
     def __iter__(self):

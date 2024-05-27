@@ -148,7 +148,8 @@ class MEBPTT():
         meta_loss:Tensor = self.meta_loss_handle(backbone = self.backbone, *args, **kwargs)
         self.diff_optimizer.backward(meta_loss)
         self.diff_optimizer.post_meta_loss_backprop(weight=weight)
-        return None
+        meta_loss = meta_loss.item()*weight
+        return meta_loss
     
     def backprop(self, num_steps:int):
         """
