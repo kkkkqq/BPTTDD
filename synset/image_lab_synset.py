@@ -28,7 +28,7 @@ class ImageLabSynSet(BaseImageSynSet):
                          ipc,
                          zca,
                          device)
-        self.targets:Tensor = F.one_hot(self.labels, num_classes)
+        self.targets:Tensor = F.one_hot(self.labels, num_classes).to(torch.float)
         self.train_images = train_images
         self.train_targets = train_targets
         if train_images:

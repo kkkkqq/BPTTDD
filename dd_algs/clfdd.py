@@ -40,6 +40,8 @@ class CLFDDAlg(BaseDDAlg):
                 images = images.to(self.device)
             if targets.device!=self.device:
                 targets = targets.to(self.device)
+            if len(targets.shape)==1:
+                targets = nn.functional.one_hot(targets).to(torch.float)
             batch_size = targets.shape[0]
             if num_data + batch_size >= self.data_per_loop:
                 batch_size = self.data_per_loop - num_data
