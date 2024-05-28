@@ -201,6 +201,7 @@ class Experiment():
             if save_vis:
                 disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
                 save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg')
+                torch.save(copy.deepcopy(self.synset, self.save_dir+'/'+str(it)+'.pt'))
             for opt in optimizers.values():
                 opt.zero_grad()
             
