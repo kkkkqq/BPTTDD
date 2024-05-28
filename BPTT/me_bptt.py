@@ -121,7 +121,7 @@ class MEBPTT():
             raise AssertionError("haven't registered backbone and optimizer!")
         return None
     
-    def forward(self, num_steps:int, *args, **kwargs):
+    def forward(self, num_steps:int, *args, num_taped:int=None, **kwargs):
         """
         Perform the inner_loop for `num_steps` steps.\\
         Args and kwargs are those passed into forward_function_handle
@@ -130,15 +130,19 @@ class MEBPTT():
         self._check_model_opt()
         self.forward_args = args
         self.forward_kwargs = kwargs
-        for _ in range(num_steps):
+        for stepidx in range(num_steps):
             self.diff_optimizer.zero_grad()
             step_idx = self.diff_optimizer.cur_idx
             loss = self.forward_function_handle(step_idx = step_idx, backbone = self.backbone, *args, **kwargs)
             self.diff_optimizer.backward(loss)
-            self.diff_optimizer.step()
+            if num_taped is not None and stepidx < num_steps-num_taped:
+                taped = False
+            else:
+                taped = True
+            self.diff_optimizer.step(taped)
         return None
     
-    def meta_loss(self, *args, weight=1, **kwargs):
+    def meta_loss(self, *args, weight=1, **kwargs)->float:
         """
         Compute meta loss, args and kwargs are passed into meta_loss_handle apart from backbone.\\
         This may be called multiple times and the weighted meta_loss will be accumulated.

@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 from kornia.enhance import ZCAWhitening as ZCA
 from augment.augment import DiffAug
 import numpy as np
+from utils import get_optimizer
 
 class ImageLabSynSet(BaseImageSynSet):
 
@@ -18,7 +19,9 @@ class ImageLabSynSet(BaseImageSynSet):
                  zca:ZCA=None,
                  device='cpu',
                  train_images:bool=True,
+                 images_opt_args:dict=None,
                  train_targets:bool=True,
+                 targets_opt_args:dict=None,
                  init_type:str='noise_normal',
                  real_loader:DataLoader=None,
                  augment_args:dict = None):
@@ -31,10 +34,14 @@ class ImageLabSynSet(BaseImageSynSet):
         self.targets:Tensor = F.one_hot(self.labels, num_classes).to(torch.float)
         self.train_images = train_images
         self.train_targets = train_targets
+        self.images_opt_args = images_opt_args
+        self.targets_opt_args = targets_opt_args
         if train_images:
             self.trainables['images'] = self.images
+            assert self.images_opt_args is not None
         if train_targets:
             self.trainables['targets'] = self.targets
+            assert self.targets_opt_args is not None
         self.init_type = init_type
         init = self.init_type.lower().split('_')
         if 'noise' in init:
@@ -57,6 +64,7 @@ class ImageLabSynSet(BaseImageSynSet):
             self.augment = DiffAug(**self.augment_args)
 
         self.seed_shift = np.random.randint(10000)
+        self.train()
         return None
 
 
@@ -67,7 +75,7 @@ class ImageLabSynSet(BaseImageSynSet):
         self.images = self.images.to(device)
         self.targets = self.targets.to(device)
         self.trainables['images'] = self.images
-        self.trainables['labs'] = self.images
+        self.trainables['targets'] = self.targets
         return None
     
     def batch(self, batch_idx:int, batch_size:int, class_idx:int=None, tracked:bool=True):
@@ -108,3 +116,10 @@ class ImageLabSynSet(BaseImageSynSet):
         super().shuffle(shuffle_classes)
         self.seed_shift = np.random.randint(10000)
     
+    def make_optimizers(self):
+        opt_dct = dict()
+        if self.train_images:
+            opt_dct['images'] = get_optimizer([self.images], **self.images_opt_args)
+        if self.train_targets:
+            opt_dct['targets'] = get_optimizer([self.targets], **self.targets_opt_args)
+        return opt_dct

@@ -47,7 +47,7 @@ class BaseSynSet():
     def to(self, device):
         raise NotImplementedError
     
-    def batch(self, batch_idx:int, batch_size:int, class_idx:int=None):
+    def batch(self, batch_idx:int, batch_size:int, class_idx:int=None, tracked:bool=True):
         raise NotImplementedError
 
     def shuffle(self):
@@ -77,6 +77,12 @@ class BaseSynSet():
                 for val in trainable.values():
                     val.requires_grad_(True)
         return None
+    
+    def make_optimizers(self):
+        """
+        returns a dict of optimizers attached to self.trainables
+        """
+        raise NotImplementedError
     
 class BaseImageSynSet(BaseSynSet):
 
@@ -186,7 +192,7 @@ class BaseImageSynSet(BaseSynSet):
             imgs = self.clip(imgs)
         imgs = self.upsample(imgs)
         imgs = self.make_grid(imgs)
-        return imgs
+        return imgs.detach().cpu()
 
     @staticmethod
     def noise_init_images(images:Tensor, normalize:bool=True):

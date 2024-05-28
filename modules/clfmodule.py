@@ -32,7 +32,7 @@ class ClassifierModule(BaseModule):
         if len(targets.shape)>1:
             targets_argmax = torch.argmax(out, dim=1).to(torch.long)
         acc = torch.sum(torch.eq(out_argmax, targets_argmax))
-        return batchsize, {'loss':loss, 'acc':acc}
+        return batchsize, {'loss':loss.item()*batchsize, 'acc':acc.item()}
 
 
 

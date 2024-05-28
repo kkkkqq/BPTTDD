@@ -17,7 +17,8 @@ class CLFDDAlg(BaseDDAlg):
                  inner_model_args:dict,
                  inner_opt_args:dict,
                  inner_batch_size:int,
-                 real_loader:DataLoader,
+                 real_dataset:ImageDataSet,
+                 meta_loss_batchsize:int,
                  data_per_loop:int):
         super().__init__(synset,
                          inner_module,
@@ -25,7 +26,8 @@ class CLFDDAlg(BaseDDAlg):
                          inner_opt_args,
                          inner_batch_size,
                          None)
-        self.real_loader = real_loader
+        self.meta_loss_batchsize = meta_loss_batchsize
+        self.real_loader = DataLoader(real_dataset.dst_train, batch_size=meta_loss_batchsize, shuffle=True)
         self.data_per_loop = data_per_loop
     
     def meta_loss_handle(self, backbone: nn.Module, *args):
@@ -49,5 +51,8 @@ class CLFDDAlg(BaseDDAlg):
                 targets = targets[:batch_size]
             weight = float(batch_size)/float(self.data_per_loop)
             meta_loss += self.me_bptt.meta_loss(images, targets, weight=weight)
+            num_data += batch_size
+            if num_data >= self.data_per_loop:
+                break
         return meta_loss
 

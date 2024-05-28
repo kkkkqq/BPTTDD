@@ -26,6 +26,9 @@ class BaseDDAlg():
         self.inner_model_args = inner_model_args
         self.inner_opt_args = inner_opt_args
         self.inner_batch_size = inner_batch_size
+        if self.inner_batch_size is None:
+            print('inner batch size not given, use full batch.')
+            self.inner_batch_size = self.synset.num_items
         self.me_bptt = MEBPTT(self.forward_function_handle, self.meta_loss_handle)
         self.me_bptt.register_meta_params(**self.synset.trainables)
 
@@ -57,9 +60,10 @@ class BaseDDAlg():
         '''
         self.synset.train()
         backbone = get_model(**self.inner_model_args)
+        backbone.to(self.device)
         opt = get_optimizer(backbone.parameters(), **self.inner_opt_args)
         self.me_bptt.register_backbone_and_optimizer(backbone, opt)
-        self.me_bptt.forward(num_forward)
+        self.me_bptt.forward(num_forward, num_taped=num_backward)
         meta_loss = self.compute_meta_loss()
         self.me_bptt.backprop(num_backward)
         return meta_loss

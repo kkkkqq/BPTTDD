@@ -6,8 +6,10 @@ class SynSetLoader():
     def __init__(self, synset:BaseSynSet, max_items:int, batch_size:int, copy_synset:bool=True):
         if copy_synset:
             self.synset = copy.deepcopy(synset)
+            synset.eval()
         else:
             self.synset = synset
+        
         self.max_items = max_items
         self.batch_size = batch_size
 
@@ -16,7 +18,7 @@ class SynSetLoader():
         unfinished = True
         batch_idx = 0
         while unfinished:
-            out = self.synset.batch(batch_idx, self.batch_size)
+            out = self.synset.batch(batch_idx, self.batch_size, tracked=False)
             btch = min(self.synset.num_items, self.batch_size)
             num_items += btch
             if num_items >= self.max_items:
