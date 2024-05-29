@@ -7,37 +7,39 @@ from synset.base_synset import BaseSynSet
 from utils import get_model, get_optimizer
 from dataset.baseset import ImageDataSet
 from modules.basemodule import BaseModule
-
+from modules.clfmodule import ClassifierModule
+from typing import Callable
+from modules.utils import get_module
 
 class CLFDDAlg(BaseDDAlg):
 
     def __init__(self,
-                 synset:BaseSynSet,
-                 inner_module:BaseModule,
+                 batch_function:Callable,
+                 inner_module_args:dict,
                  inner_model_args:dict,
                  inner_opt_args:dict,
                  inner_batch_size:int,
-                 real_dataset:ImageDataSet,
-                 meta_loss_batchsize:int,
-                 data_per_loop:int):
-        super().__init__(synset,
-                         inner_module,
+                 external_module_args:dict,
+                 data_per_loop:int,
+                 device='cuda'):
+        super().__init__(batch_function,
+                         inner_module_args,
                          inner_model_args,
                          inner_opt_args,
                          inner_batch_size,
-                         None)
-        self.meta_loss_batchsize = meta_loss_batchsize
-        self.real_loader = DataLoader(real_dataset.dst_train, batch_size=meta_loss_batchsize, shuffle=True)
+                         device)
+        self.external_module_args = external_module_args
+        self.external_module = get_module(**external_module_args)
         self.data_per_loop = data_per_loop
     
     def meta_loss_handle(self, backbone: nn.Module, *args):
-        loss = self.inner_module.forward_loss(backbone, *args)[0]
+        loss = self.external_module.forward_loss(backbone, *args)[0]
         return loss
     
-    def compute_meta_loss(self):
+    def compute_meta_loss(self, dataloader:DataLoader):
         num_data = 0
         meta_loss = 0.
-        for images, targets in self.real_loader:
+        for images, targets in dataloader:
             if images.device != self.device:
                 images = images.to(self.device)
             if targets.device!=self.device:

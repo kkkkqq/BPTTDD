@@ -17,33 +17,36 @@ class ImageLabSynSet(BaseImageSynSet):
                  image_size:Tuple[int,int],
                  ipc:int,
                  zca:ZCA=None,
-                 device='cpu',
+                 device='cuda',
                  train_images:bool=True,
                  images_opt_args:dict=None,
                  train_targets:bool=True,
                  targets_opt_args:dict=None,
                  init_type:str='noise_normal',
                  real_loader:DataLoader=None,
-                 augment_args:dict = None):
+                 augment_args:dict = None,
+                 classwise:bool=False):
         super().__init__(channel,
                          num_classes,
                          image_size,
                          ipc,
                          zca,
-                         device)
+                         device,
+                         classwise)
         self.targets:Tensor = F.one_hot(self.labels, num_classes).to(torch.float)
         self.train_images = train_images
         self.train_targets = train_targets
         self.images_opt_args = images_opt_args
         self.targets_opt_args = targets_opt_args
         if train_images:
-            self.trainables['images'] = self.images
+            self.trainables['images'] = self.get_images_lst()
             assert self.images_opt_args is not None
         if train_targets:
-            self.trainables['targets'] = self.targets
+            self.trainables['targets'] = [self.targets]
             assert self.targets_opt_args is not None
         self.init_type = init_type
         init = self.init_type.lower().split('_')
+        self.real_loader = real_loader
         if 'noise' in init:
             if 'normal' in init:
                 self.noise_init(True)
@@ -69,32 +72,46 @@ class ImageLabSynSet(BaseImageSynSet):
 
 
     def __getitem__(self, idxes):
-        return self.images[idxes], self.targets[idxes]
+        if not self.classwise:
+            images, targets = self.images[idxes], self.targets[idxes]
+        else:
+            raise NotImplementedError
+        return images, targets
         
     def to(self, device):
-        self.images = self.images.to(device)
+        super().to(device)
+        self.trainables['images'] = self.get_images_lst()
         self.targets = self.targets.to(device)
-        self.trainables['images'] = self.images
-        self.trainables['targets'] = self.targets
+        self.trainables['targets'] = [self.targets]
         return None
     
     def batch(self, batch_idx:int, batch_size:int, class_idx:int=None, tracked:bool=True):
         if class_idx is None:
-            sampler = self.sampler
-            images = self.images
-            targets = self.targets
-            if batch_size<self.num_items:
-                idxes = sampler.sample_idxes(batch_idx, batch_size)
-                imgs = images[idxes]
-                tgts = targets[idxes]
+            if self.classwise:
+                if batch_size < self.num_items:
+                    imgs = torch.cat(self.images_lst, dim=0)
+                    tgts = self.targets
+                else:
+                    raise NotImplementedError("currently only support full batch for classwise synsets")
             else:
-                imgs = images
-                tgts = targets
+                sampler = self.sampler
+                images = self.images
+                targets = self.targets
+                if batch_size<self.num_items:
+                    idxes = sampler.sample_idxes(batch_idx, batch_size)
+                    imgs = images[idxes]
+                    tgts = targets[idxes]
+                else:
+                    imgs = images
+                    tgts = targets
         else:
             sampler = self.class_samplers[class_idx]
             start_idx = class_idx * self.ipc
             end_idx = start_idx + self.ipc
-            images = self.images[start_idx:end_idx]
+            if self.classwise:
+                images = self.images_lst[class_idx]
+            else:
+                images = self.images[start_idx:end_idx]
             targets = self.targets[start_idx:end_idx]
             if batch_size<self.ipc:
                 idxes = sampler.sample_idxes(batch_idx, batch_size)
@@ -119,7 +136,7 @@ class ImageLabSynSet(BaseImageSynSet):
     def make_optimizers(self):
         opt_dct = dict()
         if self.train_images:
-            opt_dct['images'] = get_optimizer([self.images], **self.images_opt_args)
+            opt_dct['images'] = get_optimizer(self.get_images_lst(), **self.images_opt_args)
         if self.train_targets:
             opt_dct['targets'] = get_optimizer([self.targets], **self.targets_opt_args)
         return opt_dct

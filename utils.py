@@ -22,3 +22,4 @@ def get_dataset(dataset_name:str, data_path:str, *args, **kwargs):
         return CIFAR10(data_path=data_path, *args, **kwargs)
     else:
         raise NotImplementedError
+    

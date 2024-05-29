@@ -11,6 +11,7 @@ from torchvision.utils import save_image
 from utils import get_dataset, get_model, get_optimizer
 from modules.basemodule import BaseModule
 from modules.clfmodule import ClassifierModule
+from modules.utils import get_module
 from dataset.baseset import ImageDataSet
 from synset.image_lab_synset import ImageLabSynSet
 from dd_algs.clfdd import CLFDDAlg
@@ -25,11 +26,7 @@ def seed_everything(seed:int):
     torch.cuda.manual_seed_all(seed) # 多GPU训练需要设置这个
     torch.manual_seed(seed)
 
-def get_module(module_name:str, module_args:dict):
-    if module_name.lower() in ['clfmodule', 'classifiermodule', 'classifier']:
-        return ClassifierModule(**module_args)
-    else:
-        raise NotImplementedError
+
     
 class Experiment():
 
@@ -99,16 +96,25 @@ class Experiment():
         self.num_backward:int = dd_config['num_backward']
         self.ema_grad_clip:bool = dd_config['ema_grad_clip']
         self.ema_coef:float = dd_config['ema_coef']
-        self.inner_module:BaseModule = get_module(**dd_config['inner_module_args'])
+        self.meta_loss_batchsize:int = dd_config['meta_loss_batchsize']
         ddalg_config:dict = dd_config['ddalg_config']
         ddalg_type:str = ddalg_config['ddalg_type']
         if ddalg_type in ['clfdd', 'classifier', 'classifierdd', 'clf']:
             ddalg_args = ddalg_config['ddalg_args']
-            ddalg_args['synset'] = self.synset
-            ddalg_args['inner_module'] = self.inner_module
-            ddalg_args['real_dataset'] = self.dataset
             if 'channel' not in ddalg_args['inner_model_args']:
                 ddalg_args['inner_model_args'].update(self.dataset_aux_args)
+            if 'inner_batch_size' in ddalg_args:
+                if ddalg_args['inner_batch_size'] is None:
+                    ddalg_args['inner_batch_size'] = self.synset.num_items
+            else:
+                ddalg_args['inner_batch_size'] = self.synset.num_items
+            if 'device' in ddalg_args:
+                if ddalg_args['device'] is None:
+                    ddalg_args['device'] = self.device
+            else:
+                ddalg_args['device'] = self.device
+            ddalg_args['batch_function'] = self.synset.batch
+            self.real_loader = DataLoader(self.dataset.dst_train, self.meta_loss_batchsize, True)
             self.ddalg = CLFDDAlg(**ddalg_args)
             return ddalg_config
         else:
@@ -176,6 +182,8 @@ class Experiment():
                        config=self.config)
         trainables = self.synset.trainables
         optimizers = self.synset.make_optimizers()
+        self.synset.train()
+        self.ddalg.register_meta_params(**trainables)
         #prepare for ema grad clipping
         if self.ema_grad_clip:
             ema_dict = dict()
@@ -186,6 +194,8 @@ class Experiment():
                     ema_dict[key] = [-1e5 for _ in val]
                 elif isinstance(val, dict):
                     ema_dict[key] = {k:-1e5 for k in val.keys()}
+                else:
+                    raise TypeError("trainables can only be Dict[str, Union[Tensor, List[Tensor], Dict[Tensor]]]!")
         for it in range(self.num_steps):
             if it%self.eval_interval == 0:
                 metrics = self.evaluate_synset()
@@ -201,15 +211,18 @@ class Experiment():
             if save_vis:
                 disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
                 save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg')
-                torch.save(copy.deepcopy(self.synset, self.save_dir+'/'+str(it)+'.pt'))
+                torch.save(copy.deepcopy(self.synset).to('cpu'), self.save_dir+'/'+str(it)+'.pt')
             for opt in optimizers.values():
                 opt.zero_grad()
             
+            
             if self.bptt_type.lower() in ['bptt', 'tbptt']:
-                self.ddalg.step(self.num_forward, self.num_backward)
+                meta_loss = self.ddalg_step(self.num_forward, self.num_backward)
             elif self.bptt_type.lower() in ['ratbptt', 'rat_bptt']:
                 num_forward = np.random.randint(self.num_backward, self.num_forward)
-                self.ddalg.step(num_forward, self.num_backward)
+                meta_loss = self.ddalg_step(num_forward, self.num_backward)
+            
+            wandb.log({'train/meta_loss': meta_loss}, step=it)
 
             #ema
             if self.ema_grad_clip:
@@ -246,7 +259,11 @@ class Experiment():
             for opt in optimizers.values():
                 opt.step()
                 
-            
+    def ddalg_step(self, num_forward, num_backward):
+        if isinstance(self.ddalg, CLFDDAlg):
+            return self.ddalg.step(num_forward, num_backward, meta_loss_args=[self.real_loader])
+        else:
+            raise NotImplementedError
         
         
 

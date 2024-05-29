@@ -56,20 +56,25 @@ dd_config:
   num_backward: 60
   ema_grad_clip: True
   ema_coef: 0.9
-  inner_module_args:
-    module_name: clfmodule
-    module_args:
-      aug_args:
-        strategy: ''
+  meta_loss_batchsize: 512
   ddalg_config:
     ddalg_type: clfdd
     ddalg_args:
+      inner_module_args:
+        module_name: clfmodule
+        module_args:
+          aug_args:
+            strategy: ''
+      external_module_args:
+        module_name: clfmodule
+        module_args:
+          aug_args:
+            strategy: 'flip_rotate'
       inner_model_args:
         modelname: 'convnet3'
       inner_opt_args:
         opt_name: adam
         lr: 0.001
-      inner_batch_size:
-      meta_loss_batchsize: 512
+      inner_batch_size: 100
       data_per_loop: 5120
 
