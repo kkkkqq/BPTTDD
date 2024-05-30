@@ -83,7 +83,10 @@ class BaseDDAlg():
         self.me_bptt.register_backbone_and_optimizer(backbone, opt)
         self.me_bptt.forward(num_steps=num_forward, num_taped=num_backward, **forward_kwargs)
         meta_loss = self.compute_meta_loss(**meta_loss_kwargs)
+        #mem_before_step = torch.cuda.memory_allocated(0)
         self.me_bptt.backprop(num_backward)
+        #mem_after_step = torch.cuda.memory_allocated(0)
+        #print('mem before and after backprop: ', mem_before_step, mem_after_step)
         return meta_loss
 
 

@@ -24,6 +24,8 @@ class CIFAR10(ImageDataSet):
         self.dst_train = datasets.CIFAR10(data_path, True, transform, None, False)
         self.dst_test = datasets.CIFAR10(data_path, False, transform, None, False)
         if self.zca:
+            dst_train = self.dst_train
+            dst_test = self.dst_test
             images = []
             labels = []
             print("Train ZCA")
@@ -37,7 +39,7 @@ class CIFAR10(ImageDataSet):
             zca = K.enhance.ZCAWhitening(eps=0.1, compute_inv=True)
             zca.fit(images)
             zca_images = zca(images).to("cpu")
-            dst_train = TensorDataset(zca_images, labels)
+            self.dst_train = TensorDataset(zca_images, labels)
 
             images = []
             labels = []
@@ -50,7 +52,7 @@ class CIFAR10(ImageDataSet):
             labels = torch.tensor(labels, dtype=torch.long, device="cpu")
 
             zca_images = zca(images).to("cpu")
-            dst_test = TensorDataset(zca_images, labels)
+            self.dst_test = TensorDataset(zca_images, labels)
 
             self.zca_trans = zca
         return None

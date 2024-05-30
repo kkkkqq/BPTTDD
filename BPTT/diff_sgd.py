@@ -16,6 +16,7 @@ class DiffSGD(DiffOptimizer, SGD):
             self.add_param_group(pa_grp)
         self.load_state_dict(state_dict)
         self.dLdv_groups:List[Tensor] = None
+        self.use_grad_in_backprop = False
         
     
     def step(self, taped:bool=True):

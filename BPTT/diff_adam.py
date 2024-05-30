@@ -20,6 +20,7 @@ class DiffAdam(DiffOptimizer, Adam):
         for group in self.param_groups:
             if group['amsgrad']:
                 raise NotImplementedError("Haven't implemented amsgrad!")
+        self.use_grad_in_backprop = True
     
     def step(self, taped:bool=True):
         """

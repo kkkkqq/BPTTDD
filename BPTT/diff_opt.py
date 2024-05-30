@@ -13,6 +13,8 @@ class DiffOptimizer():
         self.dLdw_groups:List[Tensor] = None
         self.dLdgrad_groups:List[Tensor] = None
         self.tape_state:bool = None
+        self._tracked_grads:List[Tensor] = None
+        self.use_grad_in_backprop:bool=None
         # self.add_dLdw_groups:List[Tensor] = None
 
     @staticmethod
@@ -100,8 +102,11 @@ class DiffOptimizer():
         with its param.grad ready before calling backprop_step.
         """
         if update_bp_states:
+            #print('memory before update state', torch.cuda.memory_allocated(0))
             self.update_backprop_state()
+            #print('memory after update state', torch.cuda.memory_allocated(0))
             meta_grads = self.backprop_meta_params(meta_params, True)
+            #print('memory after backprop metaparams', torch.cuda.memory_allocated(0))
         else:
             meta_grads = self.backprop_meta_params(meta_params)
         with torch.no_grad():
@@ -205,25 +210,29 @@ class DiffOptimizer():
                 opt_group_memos.append((start_idx, end_idx))
                 params.extend(pas)
                 start_idx = end_idx
-        grads = []
-        for group in opt.param_groups:
-            pas = group['params']
-            grads.extend([ele.grad for ele in pas])
-        grads = self.flatten(grads)
+        # grads = []
+        # for group in opt.param_groups:
+        #     pas = group['params']
+        #     grads.extend([ele.grad for ele in pas])
+        grads = self.flatten(self._tracked_grads)
         dLdgrad = self.flatten(self.dLdgrad_groups)
         meta_grads = torch.autograd.grad(outputs=grads,
                                          inputs=params,
-                                         grad_outputs=dLdgrad)
+                                         grad_outputs=dLdgrad,)
+                                         #allow_unused=True)#delete this line!!
+        self._tracked_grads = None
         with torch.no_grad():
             if update_dLdw:
                 for group_idx, memo in enumerate(opt_group_memos):
                     dLdw = self.flatten(meta_grads[memo[0]:memo[1]])
                     self.dLdw_groups[group_idx].add_(dLdw)
                 meta_grads = meta_grads[:opt_group_memos[0][0]]
+        # with torch.no_grad():
+        #     meta_grads = [torch.zeros_like(ele) for ele in meta_params]
         
         return meta_grads
     
-    def backward(self, loss:Tensor, retain_graph:bool=False, create_graph:bool=False, accum_grad:bool=True):
+    def backward(self, loss:Tensor, retain_graph:bool=False, create_graph:bool=False, accum_grad:bool=True, no_grad:bool=False):
         opt:Optimizer = self
         params = []
         for group in opt.param_groups:
@@ -234,20 +243,26 @@ class DiffOptimizer():
                                     inputs=params,
                                     retain_graph=retain_graph,
                                     create_graph=create_graph)
+        # grads = [torch.zeros_like(ele).requires_grad_(True) for ele in params]
+        # for grad in grads:
+        #     grad.grad = torch.zeros_like(grad)
         #print('grads with grads: ', grads[0].requires_grad)
-        if not grads[0].requires_grad:
+        #if not grads[0].requires_grad:
+        self._tracked_grads = grads
+        if not no_grad:
             with torch.no_grad():
                 for idx, pa in enumerate(params):
                     if pa.grad is None or not accum_grad:
-                        pa.grad = grads[idx]
+                        pa.grad = grads[idx].detach().clone()
                     else:
-                        pa.grad += grads[idx]
-        else:
-            for idx, pa in enumerate(params):
-                if pa.grad is None or not accum_grad:
-                    pa.grad = grads[idx]
-                else:
-                    pa.grad = grads[idx] + pa.grad.detach().clone().requires_grad_(True)
+                        pa.grad += grads[idx].detach().clone()
+        
+        # else:
+        #     for idx, pa in enumerate(params):
+        #         if pa.grad is None or not accum_grad:
+        #             pa.grad = grads[idx]
+        #         else:
+        #             pa.grad = grads[idx] + pa.grad.detach().clone().requires_grad_(True)
         #print(grads[0].requires_grad, params[0].grad.requires_grad)
         return None
 

@@ -230,18 +230,18 @@ class Experiment():
             for opt in optimizers.values():
                 opt.zero_grad()
             
-            mem_before_step = torch.cuda.memory_allocated(0)
+            #mem_before_step = torch.cuda.memory_allocated(0)
             if self.bptt_type.lower() in ['bptt', 'tbptt']:
                 meta_loss = self.ddalg_step(self.num_forward, self.num_backward)
             elif self.bptt_type.lower() in ['ratbptt', 'rat_bptt']:
                 num_forward = np.random.randint(self.num_backward, self.num_forward)
                 meta_loss = self.ddalg_step(num_forward, self.num_backward)
-            mem_after_step = torch.cuda.memory_allocated(0)
-            print('gpu before step at it {}: {}'.format(it, mem_before_step))
-            print('gpu after step at it {}: {}'.format(it, mem_after_step))
-            if self.use_wandb:
-                wandb.log({'GPU/before': mem_before_step})
-                wandb.log({'GPU/after': mem_after_step})
+            #mem_after_step = torch.cuda.memory_allocated(0)
+            #print('gpu before step at it {}: {}'.format(it, mem_before_step))
+            #print('gpu after step at it {}: {}'.format(it, mem_after_step))
+            #if self.use_wandb:
+            #    wandb.log({'GPU/before': mem_before_step})
+            #    wandb.log({'GPU/after': mem_after_step})
             
             print('meta_loss at it {}: {}'.format(it, meta_loss))
             if self.use_wandb:

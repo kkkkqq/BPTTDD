@@ -161,29 +161,39 @@ class MEBPTT():
         """
         Backpropagation through the forward process for `num_steps` steps.
         """
-        norms = []
+        #norms = []
         #dLdw_tape = []
         for _ in range(num_steps):
+            #print('--------newstep--------')
+            curidx = self.diff_optimizer.cur_idx
             self.diff_optimizer.roll_back()
+            #print('mem after rollback at step {}:'.format(curidx), torch.cuda.memory_allocated(0))
             #print('idx: ', self.diff_optimizer.cur_idx)
             self.diff_optimizer.zero_grad()
             step_idx = self.diff_optimizer.cur_idx
+            #print('mem after zerograd at step {}:'.format(curidx), torch.cuda.memory_allocated(0))
             loss = self.forward_function_handle(step_idx = step_idx, 
                                                 backbone = self.backbone, 
                                                 **self.forward_kwargs)
-            self.diff_optimizer.backward(loss, True, True)
+            #print('mem after forward at step {}:'.format(curidx), torch.cuda.memory_allocated(0))
+            self.diff_optimizer.backward(loss, True, True, False, self.diff_optimizer.use_grad_in_backprop==False)
+            #print('mem after backward at step {}:'.format(curidx), torch.cuda.memory_allocated(0))
             # _ = self.diff_optimizer.backprop_step(self.meta_params, True, True)
             #dLdw_tape.append(self.diff_optimizer.dLdw_groups[0].detach().clone())
-            dLdv_pre = self.diff_optimizer.dLdv_groups
-            dLdm_pre = self.diff_optimizer.dLdm_groups
-            meta_grads = self.diff_optimizer.backprop_step(self.meta_params, True, True)
-            norm0, norm1 = torch.norm(meta_grads[0]).item(), torch.norm(meta_grads[1]).item()
-            max0, max1 = torch.max(meta_grads[0]).item(), torch.max(meta_grads[1]).item()
-            norms.append((self.diff_optimizer.cur_idx, norm0, max0, norm1, max1))
-            if torch.any(torch.isnan(meta_grads[0])) or torch.any(torch.isnan(meta_grads[1])):
-                print("idx, norm0, max0, norm1, max1: ")
-                print(norms)
-                print('final loss: ', loss)
+            #dLdv_pre = self.diff_optimizer.dLdv_groups
+            #dLdm_pre = self.diff_optimizer.dLdm_groups
+            #mem_before_step = torch.cuda.memory_allocated(0)
+            _ = self.diff_optimizer.backprop_step(self.meta_params, True, True)
+            #print('mem after backprop at step {}:'.format(curidx), torch.cuda.memory_allocated(0))
+            #mem_after_step = torch.cuda.memory_allocated(0)
+            #print('mem before and after backward:', mem_before_step, mem_after_step)
+            # norm0, norm1 = torch.norm(meta_grads[0]).item(), torch.norm(meta_grads[1]).item()
+            # max0, max1 = torch.max(meta_grads[0]).item(), torch.max(meta_grads[1]).item()
+            # norms.append((self.diff_optimizer.cur_idx, norm0, max0, norm1, max1))
+            # if torch.any(torch.isnan(meta_grads[0])) or torch.any(torch.isnan(meta_grads[1])):
+            #     print("idx, norm0, max0, norm1, max1: ")
+            #     print(norms)
+            #     print('final loss: ', loss)
                 # for k, p in dict(self.backbone.named_parameters()).items():
                 #     if torch.any(torch.isnan(p)):
                 #         print('params has nan in', k)
@@ -210,8 +220,8 @@ class MEBPTT():
                 # print('params tape at this step: ')
                 # print(self.diff_optimizer.params_tape[2])
 
-                raise ValueError("meta grads exploded!")
-                
+                # raise ValueError("meta grads exploded!")
+            #print('mem at end of step {}:'.format(curidx), torch.cuda.memory_allocated(0))
         return None
 
 
