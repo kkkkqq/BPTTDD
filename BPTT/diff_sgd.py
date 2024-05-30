@@ -8,9 +8,9 @@ from typing import List, Dict, Union, Tuple
 class DiffSGD(DiffOptimizer, SGD):
 
     def __init__(self, opt:SGD):
-        super(DiffOptimizer, self).__init__()
+        DiffOptimizer.__init__(self)
         init_args, added_groups, state_dict = self.read_optimizer(opt)
-        super(SGD, self).__init__(**init_args)
+        SGD.__init__(self, **init_args)
         self.tape_state = False
         for pa_grp in added_groups:
             self.add_param_group(pa_grp)
@@ -23,7 +23,7 @@ class DiffSGD(DiffOptimizer, SGD):
         step function for DiffAdam.
         """
         self.pre_step(taped=taped)
-        super(SGD, self).step()
+        SGD.step(self)
         self.post_step(taped=taped)
         return None
     

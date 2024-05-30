@@ -43,7 +43,7 @@ class MEBPTT():
             self.diff_optimizer = diff_optimizer(optimizer)
         else:
             self.diff_optimizer = None
-        self.forward_args:list = None
+        #self.forward_args:list = None
         self.forward_kwargs:dict = None
         self.meta_params:List[Tensor] = None
         self.meta_params_memo_lst:List[Tuple[int,int,str,str]] = None
@@ -68,6 +68,8 @@ class MEBPTT():
         reads args and kwargs, flatten them into a list and replace the current registered meta_params.
         """
         self.meta_params = []
+        self.meta_params_memo_lst = []
+        self.meta_params_memo_dict = dict()
         start_idx = 0
         for arg in args:
             if isinstance(arg, Tensor):
@@ -121,35 +123,35 @@ class MEBPTT():
             raise AssertionError("haven't registered backbone and optimizer!")
         return None
     
-    def forward(self, num_steps:int, *args, num_taped:int=None, **kwargs):
+    def forward(self, num_steps:int, num_taped:int=None, **kwargs):
         """
         Perform the inner_loop for `num_steps` steps.\\
         Args and kwargs are those passed into forward_function_handle
         apart from step_idx and backbone.\\
         """
         self._check_model_opt()
-        self.forward_args = args
         self.forward_kwargs = kwargs
         for stepidx in range(num_steps):
             self.diff_optimizer.zero_grad()
             step_idx = self.diff_optimizer.cur_idx
-            loss = self.forward_function_handle(step_idx = step_idx, backbone = self.backbone, *args, **kwargs)
+            loss = self.forward_function_handle(step_idx = step_idx, backbone = self.backbone, **kwargs)
             self.diff_optimizer.backward(loss)
             if num_taped is not None and stepidx < num_steps-num_taped:
                 taped = False
             else:
                 taped = True
             self.diff_optimizer.step(taped)
+        print('forward steps: ', self.diff_optimizer.cur_idx)
         return None
     
-    def meta_loss(self, *args, weight=1, **kwargs)->float:
+    def meta_loss(self, weight=1, **kwargs)->float:
         """
         Compute meta loss, args and kwargs are passed into meta_loss_handle apart from backbone.\\
         This may be called multiple times and the weighted meta_loss will be accumulated.
         """
         self._check_model_opt()
         self.diff_optimizer.zero_grad()
-        meta_loss:Tensor = self.meta_loss_handle(backbone = self.backbone, *args, **kwargs)
+        meta_loss:Tensor = self.meta_loss_handle(backbone = self.backbone, **kwargs)
         self.diff_optimizer.backward(meta_loss)
         self.diff_optimizer.post_meta_loss_backprop(weight=weight)
         meta_loss = meta_loss.item()*weight
@@ -159,15 +161,57 @@ class MEBPTT():
         """
         Backpropagation through the forward process for `num_steps` steps.
         """
+        norms = []
+        #dLdw_tape = []
         for _ in range(num_steps):
             self.diff_optimizer.roll_back()
+            #print('idx: ', self.diff_optimizer.cur_idx)
+            self.diff_optimizer.zero_grad()
             step_idx = self.diff_optimizer.cur_idx
             loss = self.forward_function_handle(step_idx = step_idx, 
                                                 backbone = self.backbone, 
-                                                *self.forward_args,
                                                 **self.forward_kwargs)
             self.diff_optimizer.backward(loss, True, True)
-            _ = self.diff_optimizer.backprop_step(self.meta_params, True, True)
+            # _ = self.diff_optimizer.backprop_step(self.meta_params, True, True)
+            #dLdw_tape.append(self.diff_optimizer.dLdw_groups[0].detach().clone())
+            dLdv_pre = self.diff_optimizer.dLdv_groups
+            dLdm_pre = self.diff_optimizer.dLdm_groups
+            meta_grads = self.diff_optimizer.backprop_step(self.meta_params, True, True)
+            norm0, norm1 = torch.norm(meta_grads[0]).item(), torch.norm(meta_grads[1]).item()
+            max0, max1 = torch.max(meta_grads[0]).item(), torch.max(meta_grads[1]).item()
+            norms.append((self.diff_optimizer.cur_idx, norm0, max0, norm1, max1))
+            if torch.any(torch.isnan(meta_grads[0])) or torch.any(torch.isnan(meta_grads[1])):
+                print("idx, norm0, max0, norm1, max1: ")
+                print(norms)
+                print('final loss: ', loss)
+                # for k, p in dict(self.backbone.named_parameters()).items():
+                #     if torch.any(torch.isnan(p)):
+                #         print('params has nan in', k)
+                #         print(p)
+                #     if torch.any(torch.isnan(p.grad)):
+                #         print('param grad has nan in', k)
+                #         print(p.grad)
+                # print('optimizer backward states:')
+                # #print('dLdw pre backstep:')
+                # #print(dLdw_tape)
+                # print('dLdw post backstep:')
+                # print(self.diff_optimizer.dLdw_groups)
+                # print('dLdv pre backstep:')
+                # print(dLdv_pre)
+                # print('dLdv post backstep:')
+                # print(self.diff_optimizer.dLdv_groups)
+                # if isinstance(self.diff_optimizer, DiffAdam):
+                #     print('dLdm pre backstep:')
+                #     print(dLdm_pre)
+                #     print('dLdm post backstep:')
+                #     print(self.diff_optimizer.dLdm_groups)
+                # print('states tape at this step: ')
+                # print(self.diff_optimizer.states_tape[2])
+                # print('params tape at this step: ')
+                # print(self.diff_optimizer.params_tape[2])
+
+                raise ValueError("meta grads exploded!")
+                
         return None
 
 

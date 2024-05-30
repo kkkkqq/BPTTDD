@@ -55,7 +55,7 @@ class BaseSynSet():
         return None
     
     def eval(self):
-        for trainable in self.trainables:
+        for trainable in self.trainables.values():
             if isinstance(trainable, Tensor):
                 trainable.requires_grad_(False)
             elif isinstance(trainable, list) or isinstance(trainable, tuple):
@@ -69,7 +69,7 @@ class BaseSynSet():
         return None
     
     def train(self):
-        for trainable in self.trainables:
+        for trainable in self.trainables.values():
             if isinstance(trainable, Tensor):
                 trainable.requires_grad_(True)
             elif isinstance(trainable, list) or isinstance(trainable, tuple):
@@ -218,7 +218,7 @@ class BaseImageSynSet(BaseSynSet):
         with torch.no_grad():
             images[:] = torch.randn_like(images)
             if normalize:
-                images_norm = torch.norm(images, dim=(1,2,3), keepdim=True)
+                images_norm = torch.norm(images, p=2, dim=(1,2,3), keepdim=True)
                 images.div_(images_norm)
         return None
     

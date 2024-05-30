@@ -79,6 +79,6 @@ def convnet3(channel=3, num_classes=10, im_size=(32,32)):
                    128,
                    3,
                    'relu',
-                   'instance',
+                   'instancenorm',
                    'avgpooling',
                    im_size)

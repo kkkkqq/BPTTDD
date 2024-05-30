@@ -6,7 +6,7 @@ class SynSetLoader():
     def __init__(self, synset:BaseSynSet, max_items:int, batch_size:int, copy_synset:bool=True):
         if copy_synset:
             self.synset = copy.deepcopy(synset)
-            synset.eval()
+            self.synset.eval()
         else:
             self.synset = synset
         

@@ -8,11 +8,17 @@ from torch.utils.data import DataLoader
 class BaseModule():
 
     def __init__(self):
-        pass
+        self._device=None
 
     def forward_loss(self, backbone:nn.Module, *args, **kwargs)->tuple:
         '''
         returns loss, aux1, aux2, ...
+        '''
+        raise NotImplementedError
+    
+    def parse_batch(self, batch_out:tuple):
+        '''
+        parse batch into named dict
         '''
         raise NotImplementedError
     
@@ -50,14 +56,14 @@ class BaseModule():
             if record_metric:
                 num_data += outs[0]
                 out_dict = outs[1]
-                for key, val in out_dict:
+                for key, val in out_dict.items():
                     if key in metric_dict:
                         metric_dict[key] += val
                     else:
                         metric_dict[key] = val
         if record_metric:
-            for val in metric_dict.values():
-                val /= num_data
+            for key in metric_dict.keys():
+                metric_dict[key] /= num_data
             return metric_dict
         else:
             return None

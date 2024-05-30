@@ -20,7 +20,7 @@ class BaseDDAlg():
         self.batch_function = batch_function # takes (step_idx, batch_size, *args, **kwargs)
         self.inner_module_args = inner_module_args
         self.device = device
-        self.inner_module = get_module(**self.inner_module_args)
+        self.inner_module:BaseModule = get_module(**self.inner_module_args)
         self.inner_model_args = inner_model_args
         self.inner_opt_args = inner_opt_args
         self.inner_batch_size = inner_batch_size
@@ -29,23 +29,24 @@ class BaseDDAlg():
     def register_meta_params(self, *args, **kwargs):
         return self.me_bptt.register_meta_params(*args, **kwargs)
 
-    def forward_function_handle(self, step_idx:int, backbone:nn.Module, *forward_args, **forward_kwargs):
+    def forward_function_handle(self, step_idx:int, backbone:nn.Module, **forward_kwargs):
         '''
         by default, forward_args and forward_kwargs will be unrolled and passed into batch_function
         '''
-        batch_args, batch_kwargs = forward_args, forward_kwargs
-        batch_out = self.batch_function(step_idx=step_idx, batch_size=self.inner_batch_size, *batch_args, **batch_kwargs)
-        loss = self.inner_module.forward_loss(backbone, *batch_out)[0]
+        batch_kwargs = forward_kwargs
+        batch_out = self.batch_function(batch_idx=step_idx, batch_size=self.inner_batch_size, **batch_kwargs)
+        batch_out = self.inner_module.parse_batch(batch_out)
+        loss = self.inner_module.forward_loss(backbone, **batch_out)[0]
         return loss
     
-    def meta_loss_handle(self, backbone:nn.Module, *args, **kwargs):
+    def meta_loss_handle(self, backbone:nn.Module, **kwargs):
         '''
         the meta loss handle that will be called in self.me_bptt.meta_loss(*args,
         **kwargs, weight=1.)
         '''
         raise NotImplementedError
     
-    def compute_meta_loss(self, *meta_loss_args, **meta_loss_kwargs):
+    def compute_meta_loss(self, **meta_loss_kwargs):
         '''
         called in self.step(). It calls self.me_bptt.meta_loss.
         override to customize.
@@ -55,9 +56,7 @@ class BaseDDAlg():
     def step(self, 
              num_forward:int, 
              num_backward:int, 
-             forward_args:list=[],
              forward_kwargs:dict=dict(),
-             meta_loss_args:list=[],
              meta_loss_kwargs:dict=dict(),
              meta_params_lst:list=None,
              meta_params_dict:dict=None
@@ -82,8 +81,8 @@ class BaseDDAlg():
         backbone.to(self.device)
         opt = get_optimizer(backbone.parameters(), **self.inner_opt_args)
         self.me_bptt.register_backbone_and_optimizer(backbone, opt)
-        self.me_bptt.forward(num_forward=num_forward, num_taped=num_backward, *forward_args, **forward_kwargs)
-        meta_loss = self.compute_meta_loss(*meta_loss_args, **meta_loss_kwargs)
+        self.me_bptt.forward(num_steps=num_forward, num_taped=num_backward, **forward_kwargs)
+        meta_loss = self.compute_meta_loss(**meta_loss_kwargs)
         self.me_bptt.backprop(num_backward)
         return meta_loss
 

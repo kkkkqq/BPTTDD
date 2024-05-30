@@ -148,7 +148,7 @@ class Experiment():
             for _ in range(self.num_eval):
                 model = get_model(**model_args)
                 model.to(self.device)
-                opt = get_optimizer(**opt_args)
+                opt = get_optimizer(model.parameters(), **opt_args)
                 for _ in tqdm.tqdm(range(self.eval_steps-1)):
                     self.test_module.epoch(model, opt, synset_loader, False, True)
                 train_metric = self.test_module.epoch(model, opt, synset_loader, True, True)
@@ -166,9 +166,9 @@ class Experiment():
                     else:
                         mean_test_metric[key] += val/self.num_eval
             for key, val in mean_train_metric.items():
-                print('mean train', key, 'for', name, ':', val)
+                print('mean train', key, 'for', name, ':', round(val, 4))
             for key, val in mean_test_metric.items():
-                print('mean test', key, 'for', name, ':', val)
+                print('mean test', key, 'for', name, ':', round(val,4))
             metrics.update({'eval/'+name+'_train_'+ key:val for key,val in mean_train_metric.items()})
             metrics.update({'eval/'+name+'_test_'+ key:val for key,val in mean_test_metric.items()})    
         return metrics         
@@ -195,22 +195,27 @@ class Experiment():
         #prepare for ema grad clipping
         if self.ema_grad_clip:
             ema_dict = dict()
+            norm_dict = dict()
             for key, val in trainables.items():
                 if isinstance(val, torch.Tensor):
                     ema_dict[key] = -1e5
+                    norm_dict[key] = -1e5
                 elif isinstance(val, list):
                     ema_dict[key] = [-1e5 for _ in val]
+                    norm_dict[key] = [-1e5 for _ in val]
                 elif isinstance(val, dict):
                     ema_dict[key] = {k:-1e5 for k in val.keys()}
+                    norm_dict[key] = {k:-1e5 for k in val.keys()}
                 else:
                     raise TypeError("trainables can only be Dict[str, Union[Tensor, List[Tensor], Dict[Tensor]]]!")
         for it in range(self.num_steps):
-            if it%self.eval_interval == 0:
+            self.synset.shuffle()
+            if (it+1)%self.eval_interval == 0:
                 metrics = self.evaluate_synset()
                 if self.use_wandb:
                     wandb.log(metrics, step=it)
-            upload_vis = self.use_wandb and self.upload_visualize and it%self.upload_visualize_interval==0
-            save_vis = self.save_visualize and it%self.save_visualize_interval==0
+            upload_vis = self.use_wandb and self.upload_visualize and (it+1)%self.upload_visualize_interval==0
+            save_vis = self.save_visualize and (it+1)%self.save_visualize_interval==0
             if upload_vis or save_vis:
                 disp_imgs = self.synset.image_for_display(10)
             if upload_vis:
@@ -220,6 +225,8 @@ class Experiment():
                 disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
                 save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg')
                 self.save_synset(self.save_dir+'/current_synset.pt')
+
+
             for opt in optimizers.values():
                 opt.zero_grad()
             
@@ -230,46 +237,88 @@ class Experiment():
                 num_forward = np.random.randint(self.num_backward, self.num_forward)
                 meta_loss = self.ddalg_step(num_forward, self.num_backward)
             
-            wandb.log({'train/meta_loss': meta_loss}, step=it)
+            print('meta_loss at it {}: {}'.format(it, meta_loss))
+            if self.use_wandb:
+                wandb.log({'train/meta_loss': meta_loss}, step=it)
 
             #ema
             if self.ema_grad_clip:
                 for key, val in trainables.items():
                     if isinstance(val, torch.Tensor):
-                        if val.grad is not None:
-                            if not torch.all(val.grad==0):
-                                shadow = ema_dict[key]
-                                if shadow == -1e5:
-                                    ema_dict[key] = torch.norm(val.grad).item()
-                                else:
-                                    shadow -= (1 - self.ema_coef) * (shadow - torch.norm(val.grad).item())
-                                torch.nn.utils.clip_grad_norm_(val, max_norm = 2*ema_dict[key])
+                        # if val.grad is not None:
+                        #     if not torch.all(val.grad==0):
+                        shadow = ema_dict[key]
+                        norm_dict[key] = torch.norm(val.grad).item()
+                        if shadow == -1e5:
+                            ema_dict[key] = norm_dict[key]
+                        else:
+                            ema_dict[key] -= (1 - self.ema_coef) * (shadow - norm_dict[key])
+                        torch.nn.utils.clip_grad_norm_(val, max_norm = 2*ema_dict[key])
                     elif isinstance(val, list):
                         for idx, tsr in enumerate(val):
-                            if tsr.grad is not None:
-                                if not torch.all(tsr.grad==0):
-                                    shadow = ema_dict[key][idx]
-                                    if shadow == -1e5:
-                                        ema_dict[key][idx] = torch.norm(tsr.grad)
-                                    else:
-                                        shadow -= (1 - self.ema_coef) * (shadow - torch.norm(tsr.grad))
-                                    torch.nn.utils.clip_grad_norm_(tsr, max_norm = 2*ema_dict[key][idx])
+                            # if tsr.grad is not None:
+                            #     if not torch.all(tsr.grad==0):
+                            shadow = ema_dict[key][idx]
+                            norm_dict[key][idx] = torch.norm(tsr.grad).item()
+                            if shadow == -1e5:
+                                ema_dict[key][idx] = norm_dict[key][idx]
+                            else:
+                                ema_dict[key][idx] -= (1 - self.ema_coef) * (shadow - norm_dict[key][idx])
+                            torch.nn.utils.clip_grad_norm_(tsr, max_norm = 2*ema_dict[key][idx])
                     elif isinstance(val, dict):
                         for k,v in val.items():
-                            if v.grad is not None:
-                                if not torch.all(v.grad==0):
-                                    shadow = ema_dict[key][k]
-                                    if shadow == -1e5:
-                                        ema_dict[key][k] = torch.norm(v.grad)
-                                    else:
-                                        shadow -= (1 - self.ema_coef) * (shadow - torch.norm(v.grad))
-                                    torch.nn.utils.clip_grad_norm_(v, max_norm = 2*ema_dict[key][k])
+                            # if v.grad is not None:
+                            #     if not torch.all(v.grad==0):
+                            shadow = ema_dict[key][k]
+                            norm_dict[key][k] = torch.norm(v.grad).item()
+                            if shadow == -1e5:
+                                ema_dict[key][k] = norm_dict[key][k]
+                            else:
+                                ema_dict[key][k] -= (1 - self.ema_coef) * (shadow - norm_dict[key][k])
+                            torch.nn.utils.clip_grad_norm_(v, max_norm = 2*ema_dict[key][k])
+                    else:
+                        raise TypeError("values of trainables can only be Tensor|List[Tensor]|Dict[str,Tensor]")
+                
+                upload_gradema_dct = dict()
+                for key, val in ema_dict.items():
+                    name = key
+                    if isinstance(val, list):
+                        for idx, ema in enumerate(val):
+                            newname = name + str(idx)
+                            upload_gradema_dct[newname] = ema
+                    elif isinstance(val, dict):
+                        for k,v in val.items():
+                            newname = name + k
+                            upload_gradema_dct[k] = v
+                    elif isinstance(val, float):
+                        upload_gradema_dct[name] = val
+                upload_gradema_dct = {'GradEMA/'+k:v for k,v in upload_gradema_dct.items()}
+                if self.use_wandb:
+                    wandb.log(upload_gradema_dct, step=it)
+            
+                upload_gradnorm_dct = dict()
+                for key, val in norm_dict.items():
+                    name = key
+                    if isinstance(val, list):
+                        for idx, nm in enumerate(val):
+                            newname = name + str(idx)
+                            upload_gradnorm_dct[newname] = nm
+                    elif isinstance(val, dict):
+                        for k,nm in val.items():
+                            newname = name + k
+                            upload_gradnorm_dct[k] = nm
+                    elif isinstance(val, float):
+                        upload_gradnorm_dct[name] = val
+                upload_gradnorm_dct = {'GradNorm/'+k:v for k,v in upload_gradnorm_dct.items()}
+                if self.use_wandb:
+                    wandb.log(upload_gradnorm_dct, step=it)
+                
             for opt in optimizers.values():
                 opt.step()
                 
     def ddalg_step(self, num_forward, num_backward):
         if isinstance(self.ddalg, CLFDDAlg):
-            return self.ddalg.step(num_forward, num_backward, meta_loss_args=[self.real_loader])
+            return self.ddalg.step(num_forward, num_backward, meta_loss_kwargs={'dataloader': self.real_loader})
         else:
             raise NotImplementedError
         

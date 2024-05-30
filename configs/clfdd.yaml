@@ -1,0 +1,80 @@
+exp_config:
+  project: CLFDD
+  exp_name: clfdd-rat-200-60
+  seed: 0
+  use_wandb: True
+  wandb_api_key: 
+  num_steps: 60000
+  device: 'cuda'
+
+dataset_config:
+  dataset_name: cifar10
+  data_path: /data/tfliu/dataset
+  zca: False
+
+eval_config:
+  eval_interval: 100
+  num_eval: 3
+  eval_models:
+    conv3:
+      model_args:
+        modelname: convnet3
+      opt_args:
+        opt_name: 'adam'
+        lr: 0.001
+  eval_steps: 1000
+  test_module_args:
+    module_name: clfmodule
+    module_args:
+      aug_args:
+        strategy: ''
+  upload_visualize: True
+  upload_visualize_interval: 100
+  save_visualize: True
+  save_visualize_interval: 100
+
+synset_config:
+  synset_type: imagelabsynset
+  synset_args: 
+    ipc: 10
+    train_images: True
+    images_opt_args:
+      opt_name: adam
+      lr: 0.001
+    train_targets: True
+    targets_opt_args:
+      opt_name: adam
+      lr: 0.001
+    init_type: 'noise_normal'
+    augment_args:
+      strategy: 'flip_rotate'
+      batch: True
+
+dd_config:
+  bptt_type: rat_bptt
+  num_forward: 200
+  num_backward: 60
+  ema_grad_clip: True
+  ema_coef: 0.9
+  meta_loss_batchsize: 512
+  ddalg_config:
+    ddalg_type: clfdd
+    ddalg_args:
+      inner_module_args:
+        module_name: clfmodule
+        module_args:
+          aug_args:
+            strategy: ''
+      external_module_args:
+        module_name: clfmodule
+        module_args:
+          aug_args:
+            strategy: 'flip_rotate'
+      inner_model_args:
+        modelname: 'convnet3'
+      inner_opt_args:
+        opt_name: adam
+        lr: 0.001
+      inner_batch_size: 100
+      data_per_loop: 5120
+

@@ -32,8 +32,8 @@ class CLFDDAlg(BaseDDAlg):
         self.external_module = get_module(**external_module_args)
         self.data_per_loop = data_per_loop
     
-    def meta_loss_handle(self, backbone: nn.Module, *args):
-        loss = self.external_module.forward_loss(backbone, *args)[0]
+    def meta_loss_handle(self, backbone: nn.Module, **kwargs):
+        loss = self.external_module.forward_loss(backbone=backbone, **kwargs)[0]
         return loss
     
     def compute_meta_loss(self, dataloader:DataLoader):
@@ -52,7 +52,7 @@ class CLFDDAlg(BaseDDAlg):
                 images = images[:batch_size]
                 targets = targets[:batch_size]
             weight = float(batch_size)/float(self.data_per_loop)
-            meta_loss += self.me_bptt.meta_loss(images, targets, weight=weight)
+            meta_loss += self.me_bptt.meta_loss(images=images, targets=targets, weight=weight)
             num_data += batch_size
             if num_data >= self.data_per_loop:
                 break

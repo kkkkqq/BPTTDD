@@ -106,8 +106,8 @@ class DiffAug():
             theta = [[[sx[i], 0, 0], [0, sy[i], 0]] for i in range(x.shape[0])]
             theta = torch.tensor(theta, dtype=torch.float, device=x.device)
 
-        grid = F.affine_grid(theta, x.shape)
-        x = F.grid_sample(x, grid)
+        grid = F.affine_grid(theta, x.shape, align_corners=False)
+        x = F.grid_sample(x, grid, align_corners=False)
         return x
 
     def rotate_fn(self, x, batch=True):
@@ -125,8 +125,8 @@ class DiffAug():
                       [np.sin(theta[i]), np.cos(theta[i]), 0]] for i in range(x.shape[0])]
             theta = torch.tensor(theta, dtype=torch.float, device=x.device)
 
-        grid = F.affine_grid(theta, x.shape)
-        x = F.grid_sample(x, grid)
+        grid = F.affine_grid(theta, x.shape, align_corners=False)
+        x = F.grid_sample(x, grid, align_corners=False)
         return x
 
     def flip_fn(self, x, batch=True):
