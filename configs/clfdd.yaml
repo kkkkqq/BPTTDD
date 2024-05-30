@@ -52,8 +52,8 @@ synset_config:
 
 dd_config:
   bptt_type: rat_bptt
-  num_forward: 200
-  num_backward: 60
+  num_forward: 5
+  num_backward: 5
   ema_grad_clip: True
   ema_coef: 0.9
   meta_loss_batchsize: 512
@@ -76,5 +76,5 @@ dd_config:
         opt_name: adam
         lr: 0.001
       inner_batch_size: 100
-      data_per_loop: 5120
+      data_per_loop: 512
 
