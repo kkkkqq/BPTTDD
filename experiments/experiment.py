@@ -173,6 +173,14 @@ class Experiment():
             metrics.update({'eval/'+name+'_test_'+ key:val for key,val in mean_test_metric.items()})    
         return metrics         
 
+    def save_synset(self, path):
+        synsetcopy = copy.deepcopy(self.synset)
+        synsetcopy.to('cpu')
+        torch.save(synsetcopy, path)
+        return None
+
+
+
     def run(self):
         if self.use_wandb:
             wandb.login(key=self.wandb_api_key)
@@ -211,7 +219,7 @@ class Experiment():
             if save_vis:
                 disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
                 save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg')
-                torch.save(copy.deepcopy(self.synset).to('cpu'), self.save_dir+'/'+str(it)+'.pt')
+                self.save_synset(self.save_dir+'/current_synset.pt')
             for opt in optimizers.values():
                 opt.zero_grad()
             
