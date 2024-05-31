@@ -62,14 +62,11 @@ class BaseDDAlg():
              meta_params_dict:dict=None
              ):
         '''
-        `forward_args` & `forward_kwargs`: args and kwargs that will be unrolled and
-        passed into `self.forward_function_handle` as `forward_args` & `forward_kwargs`.
-        By default, these will then be passed into `self.batch_function`.\\
-        `meta_loss_args`&`meta_loss_keargs`: args and kwargs that will be unrolled and
-        passed into `self.compute_meta_loss`.\\
-        `meta_params_lst`&`meta_params_dict`: meta params to compute meta grads for. If
-        both are None, meta params will be computed for whatever registered with `self.
-        register_meta_params` earlier.
+        `forward_kwargs`: kwargs that will be unrolled and passed into `self.forward_function_handle`
+        as & `forward_kwargs`. By default, these will then be passed into `self.batch_function`.\\
+        `meta_loss_kwargs`: args and kwargs that will be unrolled and passed into `self.compute_meta_loss`.\\
+        `meta_params_lst`&`meta_params_dict`: meta params to compute meta grads for. If both are None, meta 
+        params will be computed for whatever registered with `self.register_meta_params` earlier.
         '''
         if meta_params_lst is not None or meta_params_dict is not None:
             if meta_params_lst is None:
