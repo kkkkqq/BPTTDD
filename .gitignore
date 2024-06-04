@@ -1,4 +1,6 @@
 **/__pycache__
 results/
 wandb/
-
+assets/*
+*.jpg
+*.png

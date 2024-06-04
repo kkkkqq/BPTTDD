@@ -11,7 +11,7 @@ from modules.clfmodule import ClassifierModule
 from typing import Callable
 from modules.utils import get_module
 
-class CLFDDAlg(BaseDDAlg):
+class CVAEDDAlg(BaseDDAlg):
 
     def __init__(self,
                  batch_function:Callable,
@@ -58,3 +58,12 @@ class CLFDDAlg(BaseDDAlg):
                 break
         return meta_loss
 
+    def forward_function_handle(self, step_idx:int, backbone:nn.Module, **forward_kwargs):
+        '''
+        by default, forward_args and forward_kwargs will be unrolled and passed into batch_function
+        '''
+        batch_kwargs = forward_kwargs
+        batch_out = self.batch_function(batch_idx=step_idx, batch_size=self.inner_batch_size, soft_targets=False, **batch_kwargs)
+        batch_out = self.inner_module.parse_batch(batch_out)
+        loss = self.inner_module.forward_loss(backbone, **batch_out)[0]
+        return loss

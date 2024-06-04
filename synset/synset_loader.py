@@ -1,4 +1,5 @@
 from synset.base_synset import BaseSynSet
+import torch
 import copy
 
 class SynSetLoader():
@@ -18,14 +19,15 @@ class SynSetLoader():
         unfinished = True
         batch_idx = 0
         while unfinished:
-            out = self.synset.batch(batch_idx, self.batch_size, tracked=False)
-            btch = min(self.synset.num_items, self.batch_size)
-            num_items += btch
-            if num_items >= self.max_items:
-                num_left = self.max_items-(num_items-btch)
-                out = (ele[:num_left] for ele in out)
-                unfinished = False
-                self.synset.shuffle()
+            with torch.no_grad():
+                out = self.synset.batch(batch_idx, self.batch_size, tracked=False)
+                btch = min(self.synset.num_items, self.batch_size)
+                num_items += btch
+                if num_items >= self.max_items:
+                    num_left = self.max_items-(num_items-btch)
+                    out = (ele[:num_left] for ele in out)
+                    unfinished = False
+                    self.synset.shuffle()
             yield out
 
     def __iter__(self):

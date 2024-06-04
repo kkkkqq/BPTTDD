@@ -1,6 +1,6 @@
 exp_config:
   project: CLFDD
-  exp_name: clfdd-rat-200-60-zca-10ipc
+  exp_name: cvaedd-rat-200-60-nozca-cropfliprotate-10ipc
   seed: 0
   use_wandb: True
   wandb_api_key: 
@@ -10,7 +10,7 @@ exp_config:
 dataset_config:
   dataset_name: cifar10
   data_path: /data/tfliu/dataset
-  zca: True
+  zca: False
 
 eval_config:
   eval_interval: 100
@@ -34,20 +34,23 @@ eval_config:
   save_visualize_interval: 100
 
 synset_config:
-  synset_type: imagelabsynset
+  synset_type: imagelabelersynset
   synset_args: 
     ipc: 10
+    labeler_args:
+      modelname: 'convnet3'
+    labeler_path: './assets/conv3_stdt.pt'
     train_images: True
     images_opt_args:
       opt_name: adam
-      lr: 0.001
-    train_targets: True
-    targets_opt_args:
+      lr: 1000
+    train_labeler: False
+    labeler_opt_args:
       opt_name: adam
-      lr: 0.001
+      lr: 0.0001
     init_type: 'noise_normal'
     augment_args:
-      strategy: 'flip_rotate'
+      strategy: 'crop_flip_rotate'
       batch: True
 
 dd_config:
@@ -58,23 +61,24 @@ dd_config:
   ema_coef: 0.9
   meta_loss_batchsize: 1024
   ddalg_config:
-    ddalg_type: clfdd
+    ddalg_type: cvaedd
     ddalg_args:
       inner_module_args:
-        module_name: clfmodule
+        module_name: cvaemodule
         module_args:
           aug_args:
             strategy: ''
+          kld_weight: 0.000001
       external_module_args:
-        module_name: clfmodule
+        module_name: cvaemodule
         module_args:
           aug_args:
-            strategy: 'flip_rotate'
+            strategy: 'crop_flip_rotate'
+          kld_weight: 0.0005
       inner_model_args:
-        modelname: 'convnet3'
+        modelname: 'cvae'
       inner_opt_args:
         opt_name: adam
-        lr: 0.001
+        lr: 0.0005
       inner_batch_size: 100
-      data_per_loop: 5120
-
+      data_per_loop: 6144

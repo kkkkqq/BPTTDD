@@ -14,7 +14,9 @@ from modules.clfmodule import ClassifierModule
 from modules.utils import get_module
 from dataset.baseset import ImageDataSet
 from synset.image_lab_synset import ImageLabSynSet
+from synset.image_labeler_synset import ImageLabelerSynSet
 from dd_algs.clfdd import CLFDDAlg
+from dd_algs.cvaedd import CVAEDDAlg
 from typing import Dict
 from synset.synset_loader import SynSetLoader
 
@@ -77,14 +79,19 @@ class Experiment():
     def parse_synset_config(self)->dict:
         synset_config = copy.deepcopy(self.config['synset_config'])
         synset_type:str = synset_config['synset_type']
+        synset_args:dict = synset_config['synset_args']
+        if 'channel' not in synset_args:
+                synset_args.update(self.dataset_aux_args)
+        synset_args['zca'] = self.dataset.zca_trans
+        synset_args['device'] = self.device
         if synset_type.lower() in ['imagelab', 'imagelabsynset']:
-            synset_args:dict = synset_config['synset_args']
-            synset_args.update(self.dataset_aux_args)
-            synset_args['zca'] = self.dataset.zca_trans
-            synset_args['device'] = self.device
             synset_args['real_loader'] = DataLoader(self.dataset.dst_train, 256, False)
             self.synset = ImageLabSynSet(**synset_args)
             return synset_config
+        elif synset_type.lower() in ['imagelabeler', 'imagelabelersynset']:
+            synset_args['real_loader'] = DataLoader(self.dataset.dst_train, 256, False)
+            self.synset = ImageLabelerSynSet(**synset_args)
+
         else:
             raise NotImplementedError
         
@@ -99,23 +106,36 @@ class Experiment():
         self.meta_loss_batchsize:int = dd_config['meta_loss_batchsize']
         ddalg_config:dict = dd_config['ddalg_config']
         ddalg_type:str = ddalg_config['ddalg_type']
-        if ddalg_type in ['clfdd', 'classifier', 'classifierdd', 'clf']:
-            ddalg_args = ddalg_config['ddalg_args']
-            if 'channel' not in ddalg_args['inner_model_args']:
-                ddalg_args['inner_model_args'].update(self.dataset_aux_args)
-            if 'inner_batch_size' in ddalg_args:
-                if ddalg_args['inner_batch_size'] is None:
-                    ddalg_args['inner_batch_size'] = self.synset.num_items
-            else:
+        ddalg_args = ddalg_config['ddalg_args']
+        if 'channel' not in ddalg_args['inner_model_args']:
+            ddalg_args['inner_model_args'].update(self.dataset_aux_args)
+        if 'inner_batch_size' in ddalg_args:
+            if ddalg_args['inner_batch_size'] is None:
                 ddalg_args['inner_batch_size'] = self.synset.num_items
-            if 'device' in ddalg_args:
-                if ddalg_args['device'] is None:
-                    ddalg_args['device'] = self.device
-            else:
+        else:
+            ddalg_args['inner_batch_size'] = self.synset.num_items
+        if 'device' in ddalg_args:
+            if ddalg_args['device'] is None:
                 ddalg_args['device'] = self.device
+        else:
+            ddalg_args['device'] = self.device
+        if ddalg_type in ['clfdd', 'classifier', 'classifierdd', 'clf']:
             ddalg_args['batch_function'] = self.synset.batch
             self.real_loader = DataLoader(self.dataset.dst_train, self.meta_loss_batchsize, True)
             self.ddalg = CLFDDAlg(**ddalg_args)
+            return ddalg_config
+        elif ddalg_type in ['cvaedd']:
+            ddalg_args['batch_function'] = self.synset.batch
+            self.real_loader = DataLoader(self.dataset.dst_train, self.meta_loss_batchsize, True)
+            mean = self.dataset.mean
+            std = self.dataset.std
+            inner_module_args = ddalg_args['inner_module_args']['module_args']
+            if 'rescale_mean' not in inner_module_args:
+                inner_module_args.update({'rescale_mean':mean, 'rescale_std':std})
+            external_module_args = ddalg_args['external_module_args']['module_args']
+            if 'rescale_mean' not in external_module_args:
+                external_module_args.update({'rescale_mean':mean, 'rescale_std':std})
+            self.ddalg = CVAEDDAlg(**ddalg_args)
             return ddalg_config
         else:
             raise NotImplementedError
@@ -218,12 +238,13 @@ class Experiment():
             save_vis = self.save_visualize and (it+1)%self.save_visualize_interval==0
             if upload_vis or save_vis:
                 disp_imgs = self.synset.image_for_display(10)
+                imgs_save = self.synset.image_for_display(10, False, False)
             if upload_vis:
                 wandb.log({'Images': wandb.Image(disp_imgs)}, step=it)
-                wandb.log({'Pixels': wandb.Histogram(disp_imgs)}, step=it)
+                wandb.log({'Pixels': wandb.Histogram(imgs_save)}, step=it)
             if save_vis:
-                disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
-                save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg')
+                # disp_imgs.div_(torch.max(torch.abs(disp_imgs))*2).add_(0.5)
+                save_image(disp_imgs, self.save_dir+'/'+str(it)+'.jpg', nrow = self.synset.num_classes)
                 self.save_synset(self.save_dir+'/current_synset.pt')
 
 
@@ -324,6 +345,8 @@ class Experiment():
                 
     def ddalg_step(self, num_forward, num_backward):
         if isinstance(self.ddalg, CLFDDAlg):
+            return self.ddalg.step(num_forward, num_backward, meta_loss_kwargs={'dataloader': self.real_loader})
+        elif isinstance(self.ddalg, CVAEDDAlg):
             return self.ddalg.step(num_forward, num_backward, meta_loss_kwargs={'dataloader': self.real_loader})
         else:
             raise NotImplementedError

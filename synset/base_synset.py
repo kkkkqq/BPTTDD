@@ -29,13 +29,13 @@ class IdxSampler():
 
 class BaseSynSet():
 
-    def __init__(self, num_items:int, device='cpu'):
+    def __init__(self, num_items:int, device='cuda'):
         """
         Baseclass for synset.
         """
         self.trainables:dict = dict()
         self.num_items:int = num_items
-        self.device = device
+        self.device = torch.device(device)
         self.sampler = IdxSampler(self.num_items)
 
     def __getitem__(self, idxes):
@@ -108,11 +108,11 @@ class BaseImageSynSet(BaseSynSet):
         self.classwise = classwise
         if not self.classwise:
             self.images:Tensor = torch.zeros((self.num_items, self.channel, *self.image_size)).to(self.device)
-            
         else:
             self.images_lst:List[Tensor] = [torch.zeros((self.ipc, self.channel, *self.image_size)).to(self.device) for _ in range(self.num_classes)]
-        self.labels:Tensor = torch.repeat_interleave(torch.arange(self.num_classes), self.ipc, dim=0)#labels are not targets
+        self.labels:Tensor = torch.repeat_interleave(torch.arange(self.num_classes), self.ipc, dim=0).to('cpu')#labels are not targets, set to cpu by default.
         self.class_samplers = [IdxSampler(ipc) for _ in range(self.num_classes)]
+        self._labels:Tensor=None
         return None
     
     def shuffle(self, shuffle_classes:bool=False):
@@ -193,7 +193,7 @@ class BaseImageSynSet(BaseSynSet):
     def clip(self, images:Tensor):
         return self.clip_images(images.detach().clone(), 2.5)
     
-    def image_for_display(self, display_ipc:int, clip:bool=False)->Tensor:
+    def image_for_display(self, display_ipc:int, clip:bool=False, make_grid:bool=True)->Tensor:
         imgs = []
         if not self.classwise:
             for cls in range(self.num_classes):
@@ -210,7 +210,8 @@ class BaseImageSynSet(BaseSynSet):
         if clip:
             imgs = self.clip(imgs)
         imgs = self.upsample(imgs)
-        imgs = self.make_grid(imgs)
+        if make_grid:
+            imgs = self.make_grid(imgs)
         return imgs.detach().cpu()
 
     @staticmethod
@@ -281,17 +282,18 @@ class BaseImageSynSet(BaseSynSet):
             return [self.images]
         
     def to(self, device):
+        '''
+        by default sets the device of images and self.device to torch.device(device)
+        '''
+        self.device = torch.device(device)
         if self.classwise:
             self.images_lst = [img.to(device) for img in self.images_lst]
         else:
             self.images = self.images.to(device)
         return None
     
-    
-
-
-
-
+    def batch(self, batch_idx:int, batch_size:int, class_idx:int=None, tracked:bool=True, soft_targets:bool=False):
+        raise NotImplementedError
             
 
 
